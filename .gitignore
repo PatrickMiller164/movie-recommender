@@ -1,0 +1,13 @@
+explore
+output/*
+data/*
+!data/main_universe_extracted.parquet
+!data/title_ratings.tsv
+.env
+ideas.md
+
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.history
