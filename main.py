@@ -6,13 +6,13 @@ from pipeline.extract import Extractor
 from pipeline.transform import Transformer
 
 API_KEY = os.environ['API_KEY']
-RETRIEVE_MAIN_UNIVERSE = False
 
 MAIN_UNIVERSE_EXTRACTED_PATH = 'data/main_universe_extracted.parquet'
 FILMS_EXTRACTED_PATH = 'data/films_extracted.parquet'
 FILMS_TRANSFORMED_PATH = 'data/films_transformed.parquet'
 
-RUN_EXTRACTOR = False
+RETRIEVE_MAIN_UNIVERSE = False
+RUN_EXTRACTOR = True
 RUN_TRANSFORMER = True
 
 def main():
