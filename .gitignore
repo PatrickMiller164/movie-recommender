@@ -5,7 +5,7 @@ data/*
 !data/title_ratings.tsv
 .env
 ideas.md
-
+.venv
 __pycache__/
 *.pyc
 .DS_Store

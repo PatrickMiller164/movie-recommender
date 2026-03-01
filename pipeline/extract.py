@@ -4,18 +4,29 @@ import polars as pl
 from concurrent.futures import ThreadPoolExecutor
 
 class Extractor:
-    def __init__(self, API_KEY: str, RETRIEVE_MAIN_UNIVERSE: bool, MAIN_UNIVERSE_EXTRACTED_PATH, FILMS_EXTRACTED_PATH):
-        self.API_KEY = API_KEY
-        self.RETRIEVE_MAIN_UNIVERSE = RETRIEVE_MAIN_UNIVERSE
-        self.MAIN_UNIVERSE_EXTRACTED_PATH = MAIN_UNIVERSE_EXTRACTED_PATH
-        self.EXTRACTED_DATA_PATH = FILMS_EXTRACTED_PATH
-        self.BASE_URL = 'https://www.omdbapi.com'
+    def __init__(
+        self, 
+        api_key: str, 
+        request_main_universe: bool, 
+        films_csv: str, 
+        ratings_tsv: str, 
+        main_universe_parquet: str, 
+        extracted_parquet: str,
+        base_url: str
+    ):
+        self.api_key = api_key
+        self.request_main_universe = request_main_universe
+        self.films_csv = films_csv
+        self.ratings_tsv = ratings_tsv
+        self.main_universe_parquet = main_universe_parquet
+        self.extracted_parquet = extracted_parquet
+        self.base_url = base_url
 
-        self.seen = None
-        self.seen_titles = None
+        self.seen: pl.DataFrame | None = None
+        self.seen_titles = []
 
     def run(self):
-        self.seen = pl.read_csv('data/films.csv')
+        self.seen = pl.read_csv(self.films_csv)
         self.seen_titles = self.seen.select(pl.col('All')).to_series().to_list()
 
         main_universe_df = self._retrieve_main_universe()
@@ -26,18 +37,19 @@ class Extractor:
 
         films = pl.concat([main_universe_df, remaining_df])
         films = self._enrich(films, self.seen)
-        films.write_parquet(self.EXTRACTED_DATA_PATH)
+        films.write_parquet(self.extracted_parquet)
         print("Finished running extractor")
 
     def _retrieve_main_universe(self) -> pl.DataFrame:
-        if self.RETRIEVE_MAIN_UNIVERSE:
-            universe_title_ratings = self._read_tsv(path='data/title.ratings.tsv').sort('numVotes', descending=True).head(5000)
+        if self.request_main_universe:
+            universe_title_ratings = self._read_tsv(self.ratings_tsv).sort('numVotes', descending=True).head(5000)
             with ThreadPoolExecutor(max_workers=10) as executor:
-                main_universe_dicts = list(executor.map(self._get_by_id, universe_title_ratings['tconst']))
-            df = pl.from_dicts(main_universe_dicts)
-            df.write_parquet('data/main_universe_extracted.parquet')
+                dicts = list(executor.map(self._get_by_id, universe_title_ratings['tconst']))
+                dicts = [r for r in dicts if r is not None]
+            df = pl.from_dicts(dicts)
+            df.write_parquet(self.main_universe_parquet)
         else:
-            df = pl.read_parquet('data/main_universe_extracted.parquet')
+            df = pl.read_parquet(self.main_universe_parquet)
         return df
     
     def _retrieve_remaining_titles(self, remaining: list[str]) -> pl.DataFrame:
@@ -72,7 +84,7 @@ class Extractor:
         if not self._found_title(data):
             print(f"No result for '{title}'")
             return None
-        return self._fix_ratings(data, title, id)
+        return self._fix_ratings(data, title or id)
 
     def _get_by_title(self, title):
         return self._get_data(title=title)
@@ -81,26 +93,26 @@ class Extractor:
         return self._get_data(id=id)
 
     def _make_request(self, title = None, id= None) -> dict:
-        params = {'apikey': self.API_KEY}
+        params = {'apikey': self.api_key}
         if title:
             params['t'] = title
         if id:
             params['i'] = id
-        response = requests.get(self.BASE_URL, params=params)
+        response = requests.get(self.base_url, params=params)
         response.raise_for_status()
         return response.json()
 
     def _found_title(self, data: dict) -> bool:
         return data['Response'] == 'True'
 
-    def _fix_ratings(self, data: dict, title: str, id: str) -> dict:
+    def _fix_ratings(self, data: dict, title_or_id) -> dict:
         data = data.copy()
         for d in data['Ratings']:
             source = d['Source']
             rating = d['Value']
             data[f'rating_{source.replace(" ", "_")}'] = rating
         del data['Ratings']
-        data = {'Title_0': title or id, **data}
+        data = {'Title_0': title_or_id or id, **data}
         return data
     
     def _read_tsv(self, path: str) -> pl.DataFrame:

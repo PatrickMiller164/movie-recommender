@@ -1,0 +1,9 @@
+[data]
+films_csv = "data/films.csv"
+ratings_tsv = "data/title.ratings.tsv"
+main_universe_parquet = "data/main_universe_extracted.parquet"
+extracted_parquet = "data/films_extracted.parquet"
+transformed_parquet = "data/films_transformed.parquet"
+
+[api]
+omdb_base_url = "https://www.omdbapi.com"
