@@ -1,5 +1,7 @@
 import os
 import polars as pl
+import argparse
+from enum import Enum
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -12,38 +14,71 @@ from pipeline.method_vector_similarity import run_vector_similarity
 API_KEY = os.environ['API_KEY']
 
 RETRIEVE_MAIN_UNIVERSE = False
-RUN_EXTRACTOR = False
-RUN_TRANSFORMER = False
 
-def main():
-    if RUN_EXTRACTOR:
-        Extractor(API_KEY, RETRIEVE_MAIN_UNIVERSE, FILMS_CSV, RATINGS_TSV, MAIN_UNIVERSE_PARQUET, EXTRACTED_PARQUET, OMDB_BASE_URL).run()
+
+class PipelineMode(Enum):
+    FULL = "full"
+    SCORE_ONLY = "score_only"
+    EXTRACT_ONLY = "extract_only"
+    TRANSFORM_ONLY = 'transform_only'
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run movie recommender in different modes"
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=[mode.value for mode in PipelineMode],
+        default='score_only',
+        help="Pipeline mode: full, score_only, extract_only, transform_only"
+    )
+    parser.add_argument(
+        "--download_movie_universe", 
+        action="store_true",
+        help="Download movie universe metadata from imdb (top 5000 films by number of votes)"
+    )
+    return parser.parse_args()
+
+
+def main(mode: PipelineMode, download_movie_universe: bool):
+    if mode in [PipelineMode.FULL, PipelineMode.EXTRACT_ONLY]:
+        Extractor(API_KEY, download_movie_universe, FILMS_CSV, RATINGS_TSV, MAIN_UNIVERSE_PARQUET, EXTRACTED_PARQUET, OMDB_BASE_URL).run()
     
-    if RUN_TRANSFORMER:
+    if mode in [PipelineMode.FULL, PipelineMode.TRANSFORM_ONLY]:
         Transformer(EXTRACTED_PARQUET, TRANSFORMED_PARQUET).run()
 
-    universe = pl.read_parquet(TRANSFORMED_PARQUET)
-    unseen = universe.filter(~pl.col('watched'))
-    favourites = universe.filter(pl.col('rating_me') >= 2)
+    if mode in [PipelineMode.FULL, PipelineMode.SCORE_ONLY]:
+        universe = pl.read_parquet(TRANSFORMED_PARQUET)
+        unseen = universe.filter(~pl.col('watched'))
+        favourites = universe.filter(pl.col('rating_me') >= 3)
 
-    m1 = run_simple_composite(unseen, favourites)
-    m2 = run_vector_similarity(universe, unseen, favourites)
+        m1 = run_simple_composite(unseen, favourites)
+        m2 = run_vector_similarity(universe, unseen, favourites)
 
-    unseen = (
-        unseen
-        .join(m1, on='imdb_id', how='left')
-        .join(m2, on='imdb_id', how='left')
-    )
+        unseen = (
+            unseen
+            .join(m1, on='imdb_id', how='left')
+            .join(m2, on='imdb_id', how='left')
+        )
 
-    output_cols = [
-        'imdb_id', 'title', 'year', 'genre', 'director', 'writer', 'actors', 
-        'plot', 'primary_language', 'primary_country', 'poster', 'imdb_votes', 
-        'rating_mean', 'runtime_mins', 'simple_composite_score', 'vector_similarity'
-    ]
-    unseen.select(output_cols).write_csv(RECOMMENDATIONS_CSV)
-    
+        output_cols = [
+            'imdb_id', 'title', 'year', 'genre', 'director', 'writer', 'actors', 
+            'plot', 'primary_language', 'primary_country', 'poster', 'imdb_votes', 
+            'rating_mean', 'runtime_mins', 'simple_composite_score', 'vector_similarity'
+        ]
+        unseen.sort('vector_similarity', descending=True, nulls_last=True).select(output_cols).write_csv(RECOMMENDATIONS_CSV)
+        print("Finished running scorer")
+        
     print("Finished")
 
 if __name__=="__main__":
-    main()
+    args = parse_args()
+    mode = PipelineMode(args.mode)
+    download_movie_universe = args.download_movie_universe
+    print(f"Pipeline mode: {mode}")
+    print(f"Download movie universe: {download_movie_universe}")
+
+    main(mode, download_movie_universe)
 
