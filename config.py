@@ -12,4 +12,6 @@ MAIN_UNIVERSE_PARQUET = PROJECT_ROOT / _config['data']['main_universe_parquet']
 EXTRACTED_PARQUET = PROJECT_ROOT / _config['data']['extracted_parquet']
 TRANSFORMED_PARQUET = PROJECT_ROOT / _config['data']['transformed_parquet']
 
+RECOMMENDATIONS_CSV = PROJECT_ROOT / _config['output']['recommendations_csv']
+
 OMDB_BASE_URL = _config['api']['omdb_base_url']
