@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument(
         "--download_movie_universe", 
         action="store_true",
-        help="Download movie universe metadata from imdb (top 5000 films by number of votes)"
+        help="Download movie universe metadata from imdb (top 10000 films by number of votes)"
     )
     return parser.parse_args()
 
@@ -52,7 +52,7 @@ def main(mode: PipelineMode, download_movie_universe: bool):
     if mode in [PipelineMode.FULL, PipelineMode.SCORE_ONLY]:
         universe = pl.read_parquet(TRANSFORMED_PARQUET)
         unseen = universe.filter(~pl.col('watched'))
-        favourites = universe.filter(pl.col('rating_me') >= 3)
+        favourites = universe.filter(pl.col('favourites'))
 
         m1 = run_simple_composite(unseen, favourites)
         m2 = run_vector_similarity(universe, unseen, favourites)
@@ -64,10 +64,13 @@ def main(mode: PipelineMode, download_movie_universe: bool):
         )
 
         output_cols = [
-            'imdb_id', 'title', 'year', 'genre', 'director', 'writer', 'actors', 
-            'plot', 'primary_language', 'primary_country', 'poster', 'imdb_votes', 
-            'rating_mean', 'runtime_mins', 'simple_composite_score', 'vector_similarity'
+            'imdb_id', 'title', 'year', 'genre', 'rating_mean', 'imdb_votes', 'simple_composite_score', 'vector_similarity',
+            'runtime_mins',  'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot'
         ]
+
+        avg = universe['rating_mean'].mean()
+        unseen = unseen.filter(pl.col('rating_mean') > avg)
+
         unseen.sort('vector_similarity', descending=True, nulls_last=True).select(output_cols).write_csv(RECOMMENDATIONS_CSV)
         print("Finished running scorer")
         

@@ -15,13 +15,8 @@ def find_top(df: pl.DataFrame, col: str, explode: bool = False):
     df = (
         df
         .group_by(col)
-        .agg([
-            pl.mean('rating_me').alias('avg_rating'),
-            pl.len().alias('count')
-        ])
-        .with_columns(
-            (pl.col('avg_rating') * pl.col('count')).alias(score_col)
-        )
+        .agg(pl.len().alias('count'))
+        .with_columns(pl.col('count').alias(score_col))
         .sort(score_col, descending=True)
         .select([col, score_col])
     )

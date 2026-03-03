@@ -27,22 +27,24 @@ class Extractor:
 
     def run(self):
         self.seen = pl.read_csv(self.films_csv)
-        self.seen_titles = self.seen.select(pl.col('All')).to_series().to_list()
+        self.seen_titles = self.seen['All'].drop_nulls().to_list()
+        self.favourites = self.seen['Favourites'].drop_nulls().to_list()
 
         main_universe_df = self._retrieve_main_universe()
         main_universe_titles = set(main_universe_df['Title'])
 
         remaining = [i for i in self.seen_titles if i not in main_universe_titles]
+        print(f"Manually retrieving {len(remaining)} movies")
         remaining_df = self._retrieve_remaining_titles(remaining).select(main_universe_df.columns)
 
         films = pl.concat([main_universe_df, remaining_df])
-        films = self._enrich(films, self.seen)
+        films = self._enrich(films)
         films.write_parquet(self.extracted_parquet)
         print("Finished running extractor")
 
     def _retrieve_main_universe(self) -> pl.DataFrame:
         if self.request_main_universe:
-            universe_title_ratings = self._read_tsv(self.ratings_tsv).sort('numVotes', descending=True).head(5000)
+            universe_title_ratings = self._read_tsv(self.ratings_tsv).sort('numVotes', descending=True).head(10000)
             with ThreadPoolExecutor(max_workers=10) as executor:
                 dicts = list(executor.map(self._get_by_id, universe_title_ratings['tconst']))
                 dicts = [r for r in dicts if r is not None]
@@ -58,24 +60,11 @@ class Extractor:
             dicts = [r for r in dicts if r is not None]
         return pl.from_dicts(dicts)
 
-    def _enrich(self, df: pl.DataFrame, seen: pl.DataFrame) -> pl.DataFrame:
-        forgotten = set(seen['Forgotten'].drop_nulls())
-        great = set(seen['Great'].drop_nulls())
-        favourites = set(seen['Amazing'].drop_nulls())
-
-        df = df.with_columns(
-            pl.when(pl.col('Title').is_in(self.seen_titles)).then(pl.lit(True)).otherwise(pl.lit(False)).alias('watched')
-        )
+    def _enrich(self, df: pl.DataFrame) -> pl.DataFrame:
         df = (
             df
-            .with_columns(
-                pl.when(pl.col('Title').is_in(forgotten) & pl.col('watched')).then(None)
-                .when(pl.col('Title').is_in(great) & pl.col('watched')).then(pl.lit(2))
-                .when(pl.col('Title').is_in(favourites) & pl.col('watched')).then(pl.lit(3))
-                .when(~pl.col('watched')).then(None)
-                .otherwise(pl.lit(1))
-                .alias('rating_me')
-            )
+            .with_columns(pl.col('Title').is_in(self.seen_titles).alias('watched'))
+            .with_columns(pl.col('Title').is_in(self.favourites).alias('favourites'))
         )
         return df
     
