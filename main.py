@@ -77,6 +77,9 @@ if __name__=="__main__":
     args = parse_args()
     mode = PipelineMode(args.mode)
     download_movie_universe = args.download_movie_universe
+    if download_movie_universe and mode not in [PipelineMode.FULL, PipelineMode.EXTRACT_ONLY]:
+        print("Warning: -mode must be either 'full' or 'extract_only' for --download_movie_universe to take effect")
+
     print(f"Pipeline mode: {mode}")
     print(f"Download movie universe: {download_movie_universe}")
 
