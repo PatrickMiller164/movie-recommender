@@ -64,17 +64,23 @@ def main(mode: PipelineMode, download_movie_universe: bool):
         )
 
         output_cols = [
-            'imdb_id', 'title', 'year', 'genre', 'rating_mean', 'imdb_votes', 'simple_composite_score', 'vector_similarity',
-            'runtime_mins',  'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot'
+            'imdb_id', 'title', 'year', 'genre', 'rating_mean', 'imdb_votes', 'simple_composite_score', 
+            'vector_similarity', 'runtime_mins',  'primary_language', 'primary_country',  'director', 
+            'writer', 'actors', 'plot'
         ]
 
         avg = universe['rating_mean'].mean()
         unseen = unseen.filter(pl.col('rating_mean') > avg)
 
-        unseen.sort('vector_similarity', descending=True, nulls_last=True).select(output_cols).write_csv(RECOMMENDATIONS_CSV)
+        (unseen
+         .sort('vector_similarity', descending=True, nulls_last=True)
+         .select(output_cols)
+         .write_csv(RECOMMENDATIONS_CSV)
+        )
         print("Finished running scorer")
         
     print("Finished")
+
 
 if __name__=="__main__":
     args = parse_args()
