@@ -12,7 +12,6 @@ class Extractor:
         ratings_tsv: str, 
         main_universe_parquet: str, 
         extracted_parquet: str,
-        base_url: str
     ):
         self.api_key = api_key
         self.request_main_universe = request_main_universe
@@ -20,7 +19,7 @@ class Extractor:
         self.ratings_tsv = ratings_tsv
         self.main_universe_parquet = main_universe_parquet
         self.extracted_parquet = extracted_parquet
-        self.base_url = base_url
+        self.base_url = "https://www.omdbapi.com"
 
         self.seen: pl.DataFrame | None = None
         self.seen_titles = []

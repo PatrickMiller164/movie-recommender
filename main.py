@@ -5,7 +5,7 @@ from enum import Enum
 from dotenv import load_dotenv
 load_dotenv()
 
-from config import FILMS_CSV, RATINGS_TSV, MAIN_UNIVERSE_PARQUET, EXTRACTED_PARQUET, TRANSFORMED_PARQUET, OMDB_BASE_URL, RECOMMENDATIONS_CSV
+from config import FILMS_CSV, RATINGS_TSV, MAIN_UNIVERSE_PARQUET, EXTRACTED_PARQUET, TRANSFORMED_PARQUET, PRIMARY_LANGUAGE, PL_RECOMMENDATIONS_CSV, FL_RECOMMENDATIONS_CSV
 from pipeline.extract import Extractor
 from pipeline.transform import Transformer
 from pipeline.method_simple_composite import run_simple_composite
@@ -51,8 +51,7 @@ def main(mode: PipelineMode, download_movie_universe: bool):
             FILMS_CSV, 
             RATINGS_TSV, 
             MAIN_UNIVERSE_PARQUET, 
-            EXTRACTED_PARQUET, 
-            OMDB_BASE_URL
+            EXTRACTED_PARQUET
         ).run()
     
     if mode in [PipelineMode.FULL, PipelineMode.TRANSFORM_ONLY]:
@@ -78,17 +77,23 @@ def main(mode: PipelineMode, download_movie_universe: bool):
         # Create recommendations
         # - Filter for films with above average mean rating
         # - Sort by a similarity score, best recommendations first
+        # - Break up into primary language and others, then export
         output_cols = [
             'imdb_id', 'title', 'year', 'genre', 'rating_mean', 'imdb_votes', 'simple_composite_score', 
             'vector_similarity', 'tfidf_document_similarity', 
             'runtime_mins',  'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot'
         ]
-        (unseen
-         .filter(pl.col('rating_mean') > universe['rating_mean'].mean())
-         .sort('tfidf_document_similarity', descending=True, nulls_last=True)
-         .select(output_cols)
-         .write_csv(RECOMMENDATIONS_CSV)
+        unseen = (
+            unseen
+            .filter(pl.col('rating_mean') > universe['rating_mean'].mean())
+            .sort('tfidf_document_similarity', descending=True, nulls_last=True)
+            .select(output_cols)
         )
+
+        l = PRIMARY_LANGUAGE if PRIMARY_LANGUAGE in unseen['primary_language'].to_list() else 'English'
+        unseen.filter(pl.col('primary_language') == l).write_csv(PL_RECOMMENDATIONS_CSV)
+        unseen.filter(pl.col('primary_language') != l).write_csv(FL_RECOMMENDATIONS_CSV)
+            
         print("Finished running scorer")
         
     print("Finished")
