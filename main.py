@@ -11,6 +11,7 @@ from pipeline.transform import Transformer
 from pipeline.method_simple_composite import run_simple_composite
 from pipeline.method_vector_similarity import run_vector_similarity
 from pipeline.method_tfidf_plot_similarity import run_tfidf_plot_similarity
+from pipeline.get_bayesian_rating import get_bayesian_rating
 
 API_KEY = os.environ['API_KEY']
 
@@ -70,8 +71,9 @@ def main(mode: PipelineMode, download_movie_universe: bool):
             favourites, 
             document_cols=['actors_list', 'genre_list', 'director_list', 'writer_list', 'plot']
         )
+        stabilised_score = get_bayesian_rating(universe)
 
-        for df in [m1, m2, m3]:
+        for df in [m1, m2, m3, stabilised_score]:
             unseen = unseen.join(df, on='imdb_id', how='left')
 
         # Create recommendations
@@ -80,12 +82,12 @@ def main(mode: PipelineMode, download_movie_universe: bool):
         # - Break up into primary language and others, then export
         output_cols = [
             'imdb_id', 'title', 'year', 'genre', 'rating_mean', 'imdb_votes', 'simple_composite_score', 
-            'vector_similarity', 'tfidf_document_similarity', 
+            'vector_similarity', 'tfidf_document_similarity', 'bayesian_rating',
             'runtime_mins',  'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot'
         ]
         unseen = (
             unseen
-            .filter(pl.col('rating_mean') > universe['rating_mean'].mean())
+            .filter(pl.col('rating_mean') > unseen['bayesian_rating'].mean())
             .sort('tfidf_document_similarity', descending=True, nulls_last=True)
             .select(output_cols)
         )
