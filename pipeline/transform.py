@@ -76,8 +76,8 @@ class Transformer:
             .with_columns([
                 expr for c in ['actors', 'language', 'country', 'genre', 'director', 'writer']
                 for expr in [
-                    pl.col(c).str.split(',').alias(f"{c}_list"),
-                    pl.col(c).str.split(',').list.get(0).alias(f"primary_{c}")
+                    pl.col(c).str.split(', ').list.eval(pl.element().str.replace_all(" ", "_")).alias(f"{c}_list"),
+                    pl.col(c).str.split(', ').list.get(0).alias(f"primary_{c}")
                 ]
             ])
             .with_columns([
