@@ -10,6 +10,7 @@ from pipeline.extract import Extractor
 from pipeline.transform import Transformer
 from pipeline.method_simple_composite import run_simple_composite
 from pipeline.method_vector_similarity import run_vector_similarity
+from pipeline.method_tfidf_plot_similarity import run_tfidf_plot_similarity
 
 API_KEY = os.environ['API_KEY']
 
@@ -56,24 +57,26 @@ def main(mode: PipelineMode, download_movie_universe: bool):
 
         m1 = run_simple_composite(unseen, favourites)
         m2 = run_vector_similarity(universe, unseen, favourites)
+        m3 = run_tfidf_plot_similarity(universe, unseen, favourites)
 
         unseen = (
             unseen
             .join(m1, on='imdb_id', how='left')
             .join(m2, on='imdb_id', how='left')
+            .join(m3, on='imdb_id', how='left')
         )
 
+        # Create recommendations
+        # - Filter for films with above average mean rating
+        # - Sort by a similarity score, best recommendations first
         output_cols = [
             'imdb_id', 'title', 'year', 'genre', 'rating_mean', 'imdb_votes', 'simple_composite_score', 
-            'vector_similarity', 'runtime_mins',  'primary_language', 'primary_country',  'director', 
-            'writer', 'actors', 'plot'
+            'vector_similarity', 'tfidf_plot_similarity', 'runtime_mins',  'primary_language', 
+            'primary_country',  'director', 'writer', 'actors', 'plot'
         ]
-
-        avg = universe['rating_mean'].mean()
-        unseen = unseen.filter(pl.col('rating_mean') > avg)
-
         (unseen
-         .sort('vector_similarity', descending=True, nulls_last=True)
+         .filter(pl.col('rating_mean') > universe['rating_mean'].mean())
+         .sort('tfidf_plot_similarity', descending=True, nulls_last=True)
          .select(output_cols)
          .write_csv(RECOMMENDATIONS_CSV)
         )
