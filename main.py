@@ -45,7 +45,15 @@ def parse_args():
 
 def main(mode: PipelineMode, download_movie_universe: bool):
     if mode in [PipelineMode.FULL, PipelineMode.EXTRACT_ONLY]:
-        Extractor(API_KEY, download_movie_universe, FILMS_CSV, RATINGS_TSV, MAIN_UNIVERSE_PARQUET, EXTRACTED_PARQUET, OMDB_BASE_URL).run()
+        Extractor(
+            API_KEY, 
+            download_movie_universe, 
+            FILMS_CSV, 
+            RATINGS_TSV, 
+            MAIN_UNIVERSE_PARQUET, 
+            EXTRACTED_PARQUET, 
+            OMDB_BASE_URL
+        ).run()
     
     if mode in [PipelineMode.FULL, PipelineMode.TRANSFORM_ONLY]:
         Transformer(EXTRACTED_PARQUET, TRANSFORMED_PARQUET).run()
@@ -57,26 +65,27 @@ def main(mode: PipelineMode, download_movie_universe: bool):
 
         m1 = run_simple_composite(unseen, favourites)
         m2 = run_vector_similarity(universe, unseen, favourites)
-        m3 = run_tfidf_plot_similarity(universe, unseen, favourites)
-
-        unseen = (
-            unseen
-            .join(m1, on='imdb_id', how='left')
-            .join(m2, on='imdb_id', how='left')
-            .join(m3, on='imdb_id', how='left')
+        m3 = run_tfidf_plot_similarity(
+            universe, 
+            unseen, 
+            favourites, 
+            document_cols=['actors_list', 'genre_list', 'director_list', 'writer_list', 'plot']
         )
+
+        for df in [m1, m2, m3]:
+            unseen = unseen.join(df, on='imdb_id', how='left')
 
         # Create recommendations
         # - Filter for films with above average mean rating
         # - Sort by a similarity score, best recommendations first
         output_cols = [
             'imdb_id', 'title', 'year', 'genre', 'rating_mean', 'imdb_votes', 'simple_composite_score', 
-            'vector_similarity', 'tfidf_plot_similarity', 'runtime_mins',  'primary_language', 
-            'primary_country',  'director', 'writer', 'actors', 'plot'
+            'vector_similarity', 'tfidf_document_similarity', 
+            'runtime_mins',  'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot'
         ]
         (unseen
          .filter(pl.col('rating_mean') > universe['rating_mean'].mean())
-         .sort('tfidf_plot_similarity', descending=True, nulls_last=True)
+         .sort('tfidf_document_similarity', descending=True, nulls_last=True)
          .select(output_cols)
          .write_csv(RECOMMENDATIONS_CSV)
         )
