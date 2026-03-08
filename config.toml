@@ -6,6 +6,7 @@ extracted_parquet = "data/films_extracted.parquet"
 transformed_parquet = "data/films_transformed.parquet"
 
 [output]
+recommendations_csv = "output/recommendations.csv"
 primary_language_recommendations_csv = "output/primary_language_recommendations.csv"
 foreign_language_recommendations_csv = "output/foreign_language_recommendations.csv"
 

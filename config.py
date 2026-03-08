@@ -12,7 +12,6 @@ MAIN_UNIVERSE_PARQUET = PROJECT_ROOT / _config['data']['main_universe_parquet']
 EXTRACTED_PARQUET = PROJECT_ROOT / _config['data']['extracted_parquet']
 TRANSFORMED_PARQUET = PROJECT_ROOT / _config['data']['transformed_parquet']
 
+RECOMMENDATIONS_CSV = PROJECT_ROOT / _config['output']['recommendations_csv']
 PL_RECOMMENDATIONS_CSV = PROJECT_ROOT / _config['output']['primary_language_recommendations_csv']
 FL_RECOMMENDATIONS_CSV = PROJECT_ROOT / _config['output']['foreign_language_recommendations_csv']
-
-PRIMARY_LANGUAGE = _config['user']['primary_language']
