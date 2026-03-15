@@ -9,7 +9,9 @@ def get_bayesian_rating(universe: pl.DataFrame) -> pl.DataFrame:
         .with_columns(
             ((pl.col('imdb_votes') / (pl.col('imdb_votes') + m)) * pl.col('rating_mean') +
              (m / (pl.col('imdb_votes') + m)) * C
-            ).alias('rating_bayesian')
+            )
+            .round(3)
+            .alias('rating_bayesian')
         )
     )
     return universe.select(['imdb_id', 'rating_bayesian'])

@@ -31,7 +31,7 @@ def compute_similarity(df: pl.DataFrame, favourites: pl.DataFrame) -> pl.DataFra
 
     df = (
         df
-        .with_columns(pl.Series('vector_similarity', sin_scores))
+        .with_columns(pl.Series('vector_similarity', sin_scores).round(3))
         .fill_nan(0)
         .sort('vector_similarity', descending=True, nulls_last=True)
     )
