@@ -4,18 +4,21 @@ from enum import Enum
 from dotenv import load_dotenv
 load_dotenv()
 
+import config as c
 from pipeline.extract import Extractor
 from pipeline.transform import Transformer
 from pipeline.recommend import recommend
+from pipeline.recommend_similar import recommend_similar
 
 API_KEY = os.environ['API_KEY']
 
 
 class PipelineMode(Enum):
     FULL = "full"
-    RECOMMEND = "recommend"
     EXTRACT_ONLY = "extract_only"
     TRANSFORM_ONLY = 'transform_only'
+    RECOMMEND = "recommend"
+    RECOMMEND_SIMILAR = "recommend_similar"
 
 
 def parse_args():
@@ -27,7 +30,7 @@ def parse_args():
         type=str,
         choices=[mode.value for mode in PipelineMode],
         default='recommend',
-        help="Pipeline mode: full, recommend, extract_only, transform_only"
+        help="Pipeline mode: full, extract_only, transform_only, recommend, recommend_similar"
     )
     parser.add_argument(
         "--download_movie_universe", 
@@ -47,6 +50,9 @@ def main(mode: PipelineMode, download_movie_universe: bool):
     if mode in [PipelineMode.FULL, PipelineMode.RECOMMEND]:
         recommend()
 
+    if mode in [PipelineMode.RECOMMEND_SIMILAR]:
+        recommend_similar()
+
     print("Finished")
 
 
@@ -57,8 +63,15 @@ if __name__=="__main__":
     if download_movie_universe and mode not in [PipelineMode.FULL, PipelineMode.EXTRACT_ONLY]:
         print("Warning: -mode must be either 'full' or 'extract_only' for --download_movie_universe to take effect")
 
+    if not c.TRANSFORMED_PARQUET.exists() or not c.RECOMMENDATIONS_CSV.exists():
+        raise FileNotFoundError(
+            f"Required files are missing:\n"
+            f" - {c.TRANSFORMED_PARQUET}\n"
+            f" - {c.RECOMMENDATIONS_CSV}\n"
+            "Please run the main pipeline first (--mode full)"
+        )
+
     print(f"Pipeline mode: {mode}")
     print(f"Download movie universe: {download_movie_universe}")
 
     main(mode, download_movie_universe)
-
