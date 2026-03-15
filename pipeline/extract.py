@@ -1,31 +1,20 @@
 import requests
+import config as c
 import polars as pl
 
 from concurrent.futures import ThreadPoolExecutor
 
 class Extractor:
-    def __init__(
-        self, 
-        api_key: str, 
-        request_main_universe: bool, 
-        films_csv: str, 
-        ratings_tsv: str, 
-        main_universe_parquet: str, 
-        extracted_parquet: str,
-    ):
+    def __init__(self, api_key: str, request_main_universe: bool):
         self.api_key = api_key
         self.request_main_universe = request_main_universe
-        self.films_csv = films_csv
-        self.ratings_tsv = ratings_tsv
-        self.main_universe_parquet = main_universe_parquet
-        self.extracted_parquet = extracted_parquet
         self.base_url = "https://www.omdbapi.com"
 
         self.seen: pl.DataFrame | None = None
         self.seen_titles = []
 
     def run(self):
-        self.seen = pl.read_csv(self.films_csv)
+        self.seen = pl.read_csv(c.FILMS_CSV)
         self.seen_titles = self.seen['All'].drop_nulls().to_list()
         self.favourites = self.seen['Favourites'].drop_nulls().to_list()
 
@@ -38,19 +27,19 @@ class Extractor:
 
         films = pl.concat([main_universe_df, remaining_df])
         films = self._enrich(films)
-        films.write_parquet(self.extracted_parquet)
+        films.write_parquet(c.EXTRACTED_PARQUET)
         print("Finished running extractor")
 
     def _retrieve_main_universe(self) -> pl.DataFrame:
         if self.request_main_universe:
-            universe_title_ratings = self._read_tsv(self.ratings_tsv).sort('numVotes', descending=True).head(10000)
+            universe_title_ratings = self._read_tsv(c.RATINGS_TSV).sort('numVotes', descending=True).head(10000)
             with ThreadPoolExecutor(max_workers=10) as executor:
                 dicts = list(executor.map(self._get_by_id, universe_title_ratings['tconst']))
                 dicts = [r for r in dicts if r is not None]
             df = pl.from_dicts(dicts)
-            df.write_parquet(self.main_universe_parquet)
+            df.write_parquet(c.MAIN_UNIVERSE_PARQUET)
         else:
-            df = pl.read_parquet(self.main_universe_parquet)
+            df = pl.read_parquet(c.MAIN_UNIVERSE_PARQUET)
         return df
     
     def _retrieve_remaining_titles(self, remaining: list[str]) -> pl.DataFrame:

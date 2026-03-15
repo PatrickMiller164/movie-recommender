@@ -4,16 +4,11 @@ from polars.exceptions import ColumnNotFoundError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import save_npz
 import config as c
-import numpy as np
 from sklearn.cluster import KMeans
 
 class Transformer:
-    def __init__(self, input_path, output_path):
-        self.input_path = input_path
-        self.output_path = output_path
-
     def run(self):
-        df = pl.read_parquet(self.input_path)
+        df = pl.read_parquet(c.EXTRACTED_PARQUET)
 
         df = self._preprocess(df)
         df = self._set_nulls(df)
@@ -22,10 +17,15 @@ class Transformer:
         df = self._transform_misc(df)
 
         tfidf_matrix = self._generate_tfidf_document_matrix(df)
+        save_npz(c.PROJECT_ROOT/'data'/'tfidf_matrix.npz', tfidf_matrix)
         df = self._run_clustering(df, tfidf_matrix)
 
-        df.write_parquet(self.output_path)
-        save_npz(c.PROJECT_ROOT/'data'/'tfidf_matrix.npz', tfidf_matrix)
+        df.write_parquet(c.TRANSFORMED_PARQUET)
+        df.select([c for c in df.columns if df[c].dtype != pl.List]).write_csv(c.MOVIE_UNIVERSE_CSV)
+        
+        df2 = self._get_your_seen_movies_by_cluster(df)
+        df2.write_csv(c.YOUR_MOVIES_BY_CLUSTER)
+
         print("Finished running transformer")
 
     def _preprocess(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -149,4 +149,9 @@ class Transformer:
         clusters = kmeans.fit_predict(tfidf_matrix)
         return df.with_columns(pl.Series(name='cluster', values=clusters))
     
-                
+    def _get_your_seen_movies_by_cluster(self, df: pl.DataFrame) -> pl.DataFrame:
+        clusters = df['cluster'].unique().to_list()
+        seen = df.filter(pl.col('watched'))
+        dfs = [seen.filter(pl.col('cluster') == c).select('title').rename({'title': str(c)}) for c in clusters]
+        dfs = [df for df in dfs if not df.is_empty()]
+        return pl.concat(dfs, how='horizontal')

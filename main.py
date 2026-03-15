@@ -62,17 +62,10 @@ def create_final_score(df: pl.DataFrame, score_cols: list[str]) -> pl.DataFrame:
 
 def main(mode: PipelineMode, download_movie_universe: bool):
     if mode in [PipelineMode.FULL, PipelineMode.EXTRACT_ONLY]:
-        Extractor(
-            API_KEY, 
-            download_movie_universe, 
-            c.FILMS_CSV, 
-            c.RATINGS_TSV, 
-            c.MAIN_UNIVERSE_PARQUET, 
-            c.EXTRACTED_PARQUET
-        ).run()
+        Extractor(API_KEY, download_movie_universe).run()
     
     if mode in [PipelineMode.FULL, PipelineMode.TRANSFORM_ONLY]:
-        Transformer(c.EXTRACTED_PARQUET, c.TRANSFORMED_PARQUET).run()
+        Transformer().run()
 
     if mode in [PipelineMode.FULL, PipelineMode.SCORE_ONLY]:
         universe = pl.read_parquet(c.TRANSFORMED_PARQUET)
