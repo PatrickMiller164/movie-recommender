@@ -3,9 +3,10 @@ import polars as pl
 import argparse
 from enum import Enum
 from dotenv import load_dotenv
+from scipy.sparse import load_npz
 load_dotenv()
 
-import config
+import config as c
 from pipeline.extract import Extractor
 from pipeline.transform import Transformer
 from pipeline.method_simple_composite import run_simple_composite
@@ -54,7 +55,7 @@ def create_final_score(df: pl.DataFrame, score_cols: list[str]) -> pl.DataFrame:
             for c in score_cols
         ])
         .with_columns(
-            pl.mean_horizontal([pl.col(f"{c}_normalised") for c in score_cols]).alias('score')
+            pl.mean_horizontal([pl.col(f"{c}_normalised") for c in score_cols]).round(3).alias('score')
         )
     )
 
@@ -64,34 +65,37 @@ def main(mode: PipelineMode, download_movie_universe: bool):
         Extractor(
             API_KEY, 
             download_movie_universe, 
-            config.FILMS_CSV, 
-            config.RATINGS_TSV, 
-            config.MAIN_UNIVERSE_PARQUET, 
-            config.EXTRACTED_PARQUET
+            c.FILMS_CSV, 
+            c.RATINGS_TSV, 
+            c.MAIN_UNIVERSE_PARQUET, 
+            c.EXTRACTED_PARQUET
         ).run()
     
     if mode in [PipelineMode.FULL, PipelineMode.TRANSFORM_ONLY]:
-        Transformer(config.EXTRACTED_PARQUET, config.TRANSFORMED_PARQUET).run()
+        Transformer(c.EXTRACTED_PARQUET, c.TRANSFORMED_PARQUET).run()
 
     if mode in [PipelineMode.FULL, PipelineMode.SCORE_ONLY]:
-        universe = pl.read_parquet(config.TRANSFORMED_PARQUET)
+        universe = pl.read_parquet(c.TRANSFORMED_PARQUET)
         unseen = universe.filter(~pl.col('watched'))
         favourites = universe.filter(pl.col('favourites'))
+        tfidf_matrix = load_npz(c.PROJECT_ROOT/'data'/'tfidf_matrix.npz')
 
         # Calculate metrics
         m1 = run_simple_composite(unseen, favourites)
+        print("Run simple composite")
+
         m2 = run_vector_similarity(universe, unseen, favourites)
-        m3 = run_tfidf_plot_similarity(
-            universe, 
-            unseen, 
-            favourites, 
-            document_cols=['actors_list', 'genre_list', 'director_list', 'writer_list', 'plot']
-        )
-        rating_bayesian = get_bayesian_rating(universe)
-        bayesian_rating_mean = rating_bayesian['rating_bayesian'].mean()
+        print("Run vector similarity")
+
+        m3 = run_tfidf_plot_similarity(universe, unseen, favourites, tfidf_matrix)
+        print("Run tfidf plot similarity ")
+
+        m4 = get_bayesian_rating(universe)
+        bayesian_rating_mean = m4['rating_bayesian'].mean()
+        print("Run bayesian rating")
 
         # Join metrics to database
-        metrics = [m1, m2, m3, rating_bayesian]
+        metrics = [m1, m2, m3, m4]
         for m in metrics:
             unseen = unseen.join(m, on='imdb_id', how='left')
 
@@ -102,8 +106,8 @@ def main(mode: PipelineMode, download_movie_universe: bool):
         # - Filter for films with above average mean rating
         # - Sort by a similarity score, best recommendations first
         output_cols = [
-            'imdb_id', 'title', 'year', 'genre', 'score', 'rating_mean', 'rating_bayesian', 'imdb_votes', 
-            'simple_composite_score', 'vector_similarity', 'tfidf_document_similarity', 
+            'imdb_id', 'title', 'year', 'genre', 'cluster', 'score', 'rating_mean', 'rating_bayesian', 'imdb_votes', 
+            'simple_composite_score', 'vector_similarity', 'tfidf_document_similarity',
             'runtime_mins', 'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot'
         ]
         unseen = (
@@ -114,10 +118,10 @@ def main(mode: PipelineMode, download_movie_universe: bool):
         )
 
         # - Break up into primary language and others, then export
-        unseen.write_csv(config.RECOMMENDATIONS_CSV)
-        unseen.filter(pl.col('primary_language') == 'English').write_csv(config.PL_RECOMMENDATIONS_CSV)
-        unseen.filter(pl.col('primary_language') != 'English').write_csv(config.FL_RECOMMENDATIONS_CSV)
-            
+        unseen.write_csv(c.RECOMMENDATIONS_CSV)
+        unseen.filter(pl.col('primary_language') == 'English').write_csv(c.PL_RECOMMENDATIONS_CSV)
+        unseen.filter(pl.col('primary_language') != 'English').write_csv(c.FL_RECOMMENDATIONS_CSV)
+
         print("Finished running scorer")
         
     print("Finished")
