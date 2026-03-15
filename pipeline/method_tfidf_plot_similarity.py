@@ -24,8 +24,9 @@ def run_tfidf_plot_similarity(
     favourite_centroid = csr_matrix(favourite_vectors.mean(axis=0))
 
     similarity_scores = cosine_similarity(unseen_vectors, favourite_centroid).flatten()
+    similarity_scores_rounded = np.round(similarity_scores, 3)
 
     return pl.DataFrame({
         'imdb_id': unseen['imdb_id'],
-        'tfidf_document_similarity': similarity_scores
+        'tfidf_document_similarity': similarity_scores_rounded
     })
