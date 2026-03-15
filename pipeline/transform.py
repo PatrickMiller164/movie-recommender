@@ -1,5 +1,11 @@
 import polars as pl
-
+from scipy.sparse import spmatrix
+from polars.exceptions import ColumnNotFoundError
+from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy.sparse import save_npz
+import config as c
+import numpy as np
+from sklearn.cluster import KMeans
 
 class Transformer:
     def __init__(self, input_path, output_path):
@@ -15,7 +21,11 @@ class Transformer:
         df = self._transform_ratings(df)
         df = self._transform_misc(df)
 
+        tfidf_matrix = self._generate_tfidf_document_matrix(df)
+        df = self._run_clustering(df, tfidf_matrix)
+
         df.write_parquet(self.output_path)
+        save_npz(c.PROJECT_ROOT/'data'/'tfidf_matrix.npz', tfidf_matrix)
         print("Finished running transformer")
 
     def _preprocess(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -99,3 +109,44 @@ class Transformer:
             df = df[['imdb_id'] + cols]
         
         return df
+
+    def _generate_tfidf_document_matrix(self, df: pl.DataFrame) -> spmatrix:
+        # Convert List(String) columns back to String columns
+        document_cols=['actors_list', 'genre_list', 'director_list', 'writer_list', 'plot']
+        for c in document_cols:
+            if c not in df.columns:
+                raise ColumnNotFoundError(f"'{c}' not in DataFrame, check spelling.")
+            
+            if isinstance(df[c].dtype, pl.List):
+                df = df.with_columns(
+                    pl.col(c).list.join(' ').alias(c)
+                )
+
+        # Create list of movie 'documents'
+        plots = (
+            df
+            .select(pl.concat_str(document_cols, separator=' ').fill_null(""))
+            .to_series()
+            .to_list()
+        )
+
+        # Convert movie documents into numeric vectors
+        vectoriser = TfidfVectorizer(
+            stop_words='english', # Ignore common words like 'the', 'is', 'of'
+            max_features=8000, # Limit vocabulary to top 5000 words by TF-IDF weight
+            ngram_range=(1,2) # Setting the upper bound to 2 ensures phrases like 'serial killer' are captured as tokens
+        )
+
+        # Each plot is converted into a vector of 8000 TF-IDF features
+        return vectoriser.fit_transform(plots)
+
+    def _run_clustering(self, df: pl.DataFrame, tfidf_matrix: spmatrix):
+        kmeans = KMeans(
+            n_clusters=120,
+            random_state=42,
+            n_init=50
+        )
+        clusters = kmeans.fit_predict(tfidf_matrix)
+        return df.with_columns(pl.Series(name='cluster', values=clusters))
+    
+                
