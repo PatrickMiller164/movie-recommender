@@ -27,6 +27,11 @@ def find_exact_match(all_movies):
             print(f"Did you mean one of the following: {[r[0] for r in results]}")
 
 
+def get_similar(universe: pl.DataFrame, recommendations: pl.DataFrame, movie: str):
+    movie_cluster = universe.filter(pl.col('title') == movie)['cluster'].to_list()[0]
+    return recommendations.filter(pl.col('cluster') == movie_cluster).head(30)
+
+
 def get_top_three(df: pl.DataFrame) -> list:
     return (
         df
@@ -49,14 +54,13 @@ def recommend_similar():
     all_movies = movie_universe['title'].to_list()
 
     movie = find_exact_match(all_movies)
-    movie_cluster = movie_universe.filter(pl.col('title') == movie)['cluster'].to_list()[0]
 
-    res = recommendations.filter(pl.col('cluster') == movie_cluster).head(30)
+    similar = get_similar(movie_universe, recommendations, movie)
 
     relative_path = f'output/movies similar to {movie}.csv'
-    res.write_csv(c.PROJECT_ROOT/relative_path)
+    similar.write_csv(c.PROJECT_ROOT/relative_path)
 
-    top_three = get_top_three(res)
+    top_three = get_top_three(similar)
 
     print("\n🎬 Top 3 similar movies:")
     for i, title in enumerate(top_three, 1):
