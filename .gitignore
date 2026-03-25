@@ -12,3 +12,4 @@ __pycache__/
 .vscode/
 .history
 ARCHIVE/
+*.egg-info/
