@@ -1,5 +1,5 @@
 import requests
-import config as c
+import src.movie_recommender.config as c
 import polars as pl
 
 from concurrent.futures import ThreadPoolExecutor
@@ -28,7 +28,6 @@ class Extractor:
         films = pl.concat([main_universe_df, remaining_df])
         films = self._enrich(films)
         films.write_parquet(c.EXTRACTED_PARQUET)
-        print("Finished running extractor")
 
     def _retrieve_main_universe(self) -> pl.DataFrame:
         if self.request_main_universe:

@@ -1,11 +1,11 @@
 import polars as pl
-import config as c
+import src.movie_recommender.config as c
 from scipy.sparse import load_npz
 
-from pipeline.method_simple_composite import run_simple_composite
-from pipeline.method_vector_similarity import run_vector_similarity
-from pipeline.method_tfidf_plot_similarity import run_tfidf_plot_similarity
-from pipeline.get_bayesian_rating import get_bayesian_rating
+from movie_recommender.backend.pipeline.metrics.method_simple_composite import run_simple_composite
+from movie_recommender.backend.pipeline.metrics.method_vector_similarity import run_vector_similarity
+from movie_recommender.backend.pipeline.metrics.method_tfidf_plot_similarity import run_tfidf_plot_similarity
+from movie_recommender.backend.pipeline.metrics.get_bayesian_rating import get_bayesian_rating
 
 
 def create_final_score(df: pl.DataFrame, score_cols: list[str]) -> pl.DataFrame:
@@ -29,7 +29,7 @@ def recommend() -> None:
     universe = pl.read_parquet(c.TRANSFORMED_PARQUET)
     unseen = universe.filter(~pl.col('watched'))
     favourites = universe.filter(pl.col('favourites'))
-    tfidf_matrix = load_npz(c.PROJECT_ROOT/'data'/'tfidf_matrix.npz')
+    tfidf_matrix = load_npz(c.REPO_ROOT/'data'/'tfidf_matrix.npz')
 
     # Calculate metrics
     m1 = run_simple_composite(unseen, favourites)
@@ -59,7 +59,7 @@ def recommend() -> None:
     output_cols = [
         'imdb_id', 'title', 'year', 'genre', 'cluster', 'score', 'rating_mean', 'rating_bayesian', 'imdb_votes', 
         'simple_composite_score', 'vector_similarity', 'tfidf_document_similarity',
-        'runtime_mins', 'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot'
+        'runtime_mins', 'primary_language', 'primary_country',  'director', 'writer', 'actors', 'plot', 'poster'
     ]
     unseen = (
         unseen
@@ -72,5 +72,3 @@ def recommend() -> None:
     unseen.write_csv(c.RECOMMENDATIONS_CSV)
     unseen.filter(pl.col('primary_language') == 'English').write_csv(c.PL_RECOMMENDATIONS_CSV)
     unseen.filter(pl.col('primary_language') != 'English').write_csv(c.FL_RECOMMENDATIONS_CSV)
-
-    print("Finished running scorer")

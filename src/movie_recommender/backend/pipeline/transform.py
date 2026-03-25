@@ -3,7 +3,7 @@ from scipy.sparse import spmatrix
 from polars.exceptions import ColumnNotFoundError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import save_npz
-import config as c
+import src.movie_recommender.config as c
 from sklearn.cluster import KMeans
 
 class Transformer:
@@ -17,7 +17,7 @@ class Transformer:
         df = self._transform_misc(df)
 
         tfidf_matrix = self._generate_tfidf_document_matrix(df)
-        save_npz(c.PROJECT_ROOT/'data'/'tfidf_matrix.npz', tfidf_matrix)
+        save_npz(c.REPO_ROOT/'data'/'tfidf_matrix.npz', tfidf_matrix)
         df = self._run_clustering(df, tfidf_matrix)
 
         df.write_parquet(c.TRANSFORMED_PARQUET)
@@ -25,8 +25,6 @@ class Transformer:
         
         df2 = self._get_your_seen_movies_by_cluster(df)
         df2.write_csv(c.YOUR_MOVIES_BY_CLUSTER)
-
-        print("Finished running transformer")
 
     def _preprocess(self, df: pl.DataFrame) -> pl.DataFrame:
         df = (

@@ -1,6 +1,6 @@
 [project]
 name = "movie-recommender"
-version = "0.1.0"
+version = "2.0.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,3 +18,6 @@ dependencies = [
     "toml>=0.10.2",
     "uvicorn>=0.42.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
