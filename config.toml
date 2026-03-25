@@ -9,8 +9,6 @@ transformed_parquet = "data/films_transformed.parquet"
 movie_universe_csv = "output/movie_universe.csv"
 your_movies_by_cluster_csv = "output/your_movies_by_cluster.csv"
 recommendations_csv = "output/recommendations_all.csv"
-primary_language_recommendations_csv = "output/recommendations_primary_language.csv"
-foreign_language_recommendations_csv = "output/recommendations_foreign_language.csv"
 
 [user]
 primary_language = 'English' # Title case

@@ -70,5 +70,3 @@ def recommend() -> None:
 
     # - Break up into primary language and others, then export
     unseen.write_csv(c.RECOMMENDATIONS_CSV)
-    unseen.filter(pl.col('primary_language') == 'English').write_csv(c.PL_RECOMMENDATIONS_CSV)
-    unseen.filter(pl.col('primary_language') != 'English').write_csv(c.FL_RECOMMENDATIONS_CSV)
