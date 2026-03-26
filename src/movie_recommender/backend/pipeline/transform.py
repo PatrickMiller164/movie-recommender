@@ -31,7 +31,7 @@ class Transformer:
             df
             .filter(~pl.all_horizontal(pl.col(pl.Utf8).is_null()))
             .filter(pl.col('Type') == 'movie')
-            .drop(['Title_0', 'totalSeasons', 'Response', 'Website', 'DVD', 'Production'])
+            .drop(['totalSeasons', 'Response', 'Website', 'DVD', 'Production'])
         )
         return df
     
