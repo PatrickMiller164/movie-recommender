@@ -1,16 +1,12 @@
 [data]
 films_csv = "data/films.csv"
 ratings_tsv = "data/title_ratings.tsv"
+tfidf_matrix_npz = "data/tfidf_matrix.npz"
 main_universe_parquet = "data/main_universe_extracted.parquet"
 extracted_parquet = "data/films_extracted.parquet"
 transformed_parquet = "data/films_transformed.parquet"
 
 [output]
 movie_universe_csv = "output/movie_universe.csv"
-your_movies_by_cluster_csv = "output/your_movies_by_cluster.csv"
+your_movies_by_cluster_csv = "output/YOUR_MOVIES_BY_CLUSTER_CSV.csv"
 recommendations_csv = "output/recommendations_all.csv"
-primary_language_recommendations_csv = "output/recommendations_primary_language.csv"
-foreign_language_recommendations_csv = "output/recommendations_foreign_language.csv"
-
-[user]
-primary_language = 'English' # Title case

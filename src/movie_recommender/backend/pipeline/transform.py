@@ -1,14 +1,27 @@
 import polars as pl
-from scipy.sparse import spmatrix
-from polars.exceptions import ColumnNotFoundError
-from sklearn.feature_extraction.text import TfidfVectorizer
-from scipy.sparse import save_npz
-import src.movie_recommender.config as c
 from sklearn.cluster import KMeans
+from scipy.sparse import spmatrix, save_npz
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+from movie_recommender.config import Config
+
 
 class Transformer:
-    def run(self):
-        df = pl.read_parquet(c.EXTRACTED_PARQUET)
+    def __init__(self, config: Config):
+        self.config = config
+        self.vectoriser = TfidfVectorizer(
+            stop_words='english',           # Ignore common words like 'the', 'is', 'of'
+            max_features=8000,              # Limit vocabulary to top 5000 words by TF-IDF weight
+            ngram_range=(1,2)               # Setting the upper bound to 2 ensures phrases like 'serial killer' are captured as tokens
+        )
+        self.model = KMeans(
+            n_clusters=120, 
+            random_state=42, 
+            n_init=50
+        )
+
+    def run(self) -> None:
+        df = pl.read_parquet(self.config.extracted_parquet)
 
         df = self._preprocess(df)
         df = self._set_nulls(df)
@@ -16,34 +29,26 @@ class Transformer:
         df = self._transform_ratings(df)
         df = self._transform_misc(df)
 
-        tfidf_matrix = self._generate_tfidf_document_matrix(df)
-        save_npz(c.REPO_ROOT/'data'/'tfidf_matrix.npz', tfidf_matrix)
-        df = self._run_clustering(df, tfidf_matrix)
+        tfidf_matrix = self._generate_tfidf(df)
+        self._persist_artefacts(tfidf_matrix)
 
-        df.write_parquet(c.TRANSFORMED_PARQUET)
-        df.select([c for c in df.columns if df[c].dtype != pl.List]).write_csv(c.MOVIE_UNIVERSE_CSV)
-        
-        df2 = self._get_your_seen_movies_by_cluster(df)
-        df2.write_csv(c.YOUR_MOVIES_BY_CLUSTER)
+        df = self._cluster(df, tfidf_matrix)
+
+        self._write_outputs(df)
 
     def _preprocess(self, df: pl.DataFrame) -> pl.DataFrame:
-        df = (
+        return (
             df
             .filter(~pl.all_horizontal(pl.col(pl.Utf8).is_null()))
             .filter(pl.col('Type') == 'movie')
-            .drop(['Title_0', 'totalSeasons', 'Response', 'Website', 'DVD', 'Production'])
+            .drop(['totalSeasons', 'Response', 'Website', 'DVD', 'Production'])
         )
-        return df
     
     def _set_nulls(self, df: pl.DataFrame) -> pl.DataFrame:
-        df = (
-            df
-            .with_columns([
-                pl.col(c).replace("N/A", None)
-                for c in df.columns if df[c].dtype == pl.Utf8
-            ])
-        )
-        return df
+        return df.with_columns([
+            pl.col(c).replace("N/A", None).alias(c)
+            for c in df.columns if df[c].dtype == pl.Utf8
+        ])
 
     def _rename_cols(self, df: pl.DataFrame) -> pl.DataFrame:
         rename_dict = {
@@ -52,42 +57,55 @@ class Transformer:
             'imdbid': 'imdb_id',
             'boxoffice': 'box_office',
         }
-        df = (
-            df
-            .rename({c: c.lower() for c in df.columns})
-            .rename(rename_dict)
-        )
-        return df
+        return df.rename({c: c.lower() for c in df.columns}).rename(rename_dict)
+
+    def _safe_divide(self, num: pl.Expr, denom: pl.Expr) -> pl.Expr:
+        return pl.when(denom != 0).then(num / denom).otherwise(None)
 
     def _transform_ratings(self, df: pl.DataFrame) -> pl.DataFrame:
-        rating_cols = ['rating_internet_movie_database', 'rating_rotten_tomatoes', 'rating_metacritic', 'rating_imdb','rating_metascore']
-        df = (
+        def parse_fraction(col: str) -> pl.Expr:
+            split = pl.col(col).str.split("/")
+            return self._safe_divide(
+                split.list.get(0).cast(pl.Float32),
+                split.list.get(1).cast(pl.Float32)
+            )
+
+        return (
             df
             .with_columns([
-                (pl.col(c).str.split('/').list.get(0).cast(pl.Float32) / pl.col(c).str.split('/').list.get(1).cast(pl.Float32))
-                .round(2) for c in ['rating_internet_movie_database', 'rating_metacritic']
-            ]) 
-            .with_columns([
-                (pl.col('rating_rotten_tomatoes').str.split('%').list.get(0).cast(pl.Int16) / pl.lit(100)).round(2).alias('rating_rotten_tomatoes'),
-                (pl.col('imdb_rating').cast(pl.Float32) / pl.lit(10)).round(2).alias('rating_imdb'),
-                (pl.col('metascore').cast(pl.Int16) / pl.lit(100)).round(2).alias('rating_metascore')
+                parse_fraction("rating_internet_movie_database").round(2),
+                parse_fraction("rating_metacritic").round(2)
             ])
-            .with_columns(
-                pl.mean_horizontal(rating_cols).round(3).alias('rating_mean')
-            )
-            .drop(['metascore', 'imdb_rating'])
-        )
-        return df        
+            .with_columns([
+                (pl.col('rating_rotten_tomatoes').str.replace("%","").cast(pl.Float32) / 100).round(2).alias('rating_rotten_tomatoes'),
+                (pl.col('imdb_rating').cast(pl.Float32) / 10).round(2).alias('rating_imdb'),
+                (pl.col('metascore').cast(pl.Int16) / 100).round(2).alias('rating_metascore')
+            ])
+            .with_columns([
+                pl.mean_horizontal([
+                    'rating_internet_movie_database', 
+                    'rating_rotten_tomatoes', 
+                    'rating_metacritic', 
+                    'rating_imdb',
+                    'rating_metascore'
+                ])
+                .round(3)
+                .alias('rating_mean')
+            ])
+            .drop(['metascore', 'imdb_rating'], strict=False)
+        )  
 
     def _transform_misc(self, df: pl.DataFrame) -> pl.DataFrame:
-        df = (df
-            .with_columns([
-                expr for c in ['actors', 'language', 'country', 'genre', 'director', 'writer']
-                for expr in [
-                    pl.col(c).str.split(', ').list.eval(pl.element().str.replace_all(" ", "_")).alias(f"{c}_list"),
-                    pl.col(c).str.split(', ').list.get(0).alias(f"primary_{c}")
-                ]
-            ])
+        df = df.with_columns([
+            expr for c in ['actors', 'language', 'country', 'genre', 'director', 'writer'] 
+            for expr in [
+                pl.col(c).str.split(', ').list.eval(pl.element().str.replace_all(" ", "_")).alias(f"{c}_list"),
+                pl.col(c).str.split(', ').list.get(0).alias(f"primary_{c}")
+            ]
+        ])
+
+        df = (
+            df
             .with_columns([
                 pl.col('runtime').str.extract(r"(\d+\.?\d*)").cast(pl.Int16).alias('runtime_mins'),
                 pl.col('box_office').str.replace_all(r"[$,]", "").cast(pl.Int64),
@@ -99,7 +117,7 @@ class Transformer:
                 ((pl.col('runtime_mins') // 5) * 5).alias('runtime_bucket'),
                 ((pl.col('year') // 10) * 10).alias('decade')
             ])
-            .drop(['runtime'])
+            .drop(['runtime'], strict=False)
         )
 
         cols = [c for c in df.columns if c != 'imdb_id']
@@ -108,48 +126,51 @@ class Transformer:
         
         return df
 
-    def _generate_tfidf_document_matrix(self, df: pl.DataFrame) -> spmatrix:
+    def _generate_tfidf(self, df: pl.DataFrame) -> spmatrix:
         # Convert List(String) columns back to String columns
-        document_cols=['actors_list', 'genre_list', 'director_list', 'writer_list', 'plot']
-        for c in document_cols:
-            if c not in df.columns:
-                raise ColumnNotFoundError(f"'{c}' not in DataFrame, check spelling.")
-            
-            if isinstance(df[c].dtype, pl.List):
-                df = df.with_columns(
-                    pl.col(c).list.join(' ').alias(c)
-                )
+        document_cols = ['actors_list', 'genre_list', 'director_list', 'writer_list', 'plot']
+
+        df = df.with_columns([
+            pl.when(pl.col(c).is_not_null())
+            .then(pl.col(c).list.join(" ") if isinstance(df[c].dtype, pl.List) else pl.col(c))
+            .otherwise(pl.lit(""))
+            .alias(c)
+            for c in document_cols
+        ])
 
         # Create list of movie 'documents'
         plots = (
             df
-            .select(pl.concat_str(document_cols, separator=' ').fill_null(""))
+            .select(pl.concat_str(document_cols, separator=' '))
             .to_series()
             .to_list()
         )
 
-        # Convert movie documents into numeric vectors
-        vectoriser = TfidfVectorizer(
-            stop_words='english', # Ignore common words like 'the', 'is', 'of'
-            max_features=8000, # Limit vocabulary to top 5000 words by TF-IDF weight
-            ngram_range=(1,2) # Setting the upper bound to 2 ensures phrases like 'serial killer' are captured as tokens
-        )
+        # Convert movie documents into numeric vectors (8000 TF-IDF features each)
+        return self.vectoriser.fit_transform(plots)
 
-        # Each plot is converted into a vector of 8000 TF-IDF features
-        return vectoriser.fit_transform(plots)
-
-    def _run_clustering(self, df: pl.DataFrame, tfidf_matrix: spmatrix):
-        kmeans = KMeans(
-            n_clusters=120,
-            random_state=42,
-            n_init=50
-        )
-        clusters = kmeans.fit_predict(tfidf_matrix)
-        return df.with_columns(pl.Series(name='cluster', values=clusters))
+    def _cluster(self, df: pl.DataFrame, tfidf_matrix: spmatrix) -> pl.DataFrame:
+        clusters = self.model.fit_predict(tfidf_matrix)
+        return df.with_columns(pl.Series('cluster', clusters))
     
-    def _get_your_seen_movies_by_cluster(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _persist_artefacts(self, matrix: spmatrix) -> None:
+        save_npz(self.config.tfidf_maxtrix_npz, matrix)
+
+    def _get_seen_movies_by_cluster(self, df: pl.DataFrame) -> pl.DataFrame:
         clusters = df['cluster'].unique().to_list()
         seen = df.filter(pl.col('watched'))
         dfs = [seen.filter(pl.col('cluster') == c).select('title').rename({'title': str(c)}) for c in clusters]
         dfs = [df for df in dfs if not df.is_empty()]
         return pl.concat(dfs, how='horizontal')
+
+    def _write_outputs(self, df: pl.DataFrame) -> None:
+        df.write_parquet(self.config.transformed_parquet)
+        df.select([c for c in df.columns if df[c].dtype != pl.List]).write_csv(self.config.movie_universe_csv)
+        self._get_seen_movies_by_cluster(df).write_csv(self.config.your_movies_by_cluster_csv)
+    
+
+if __name__=="__main__":
+    import movie_recommender.config as c
+
+    config = Config()
+    Transformer(config).run() 
