@@ -1,4 +1,5 @@
 import requests
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 import polars as pl
@@ -7,6 +8,7 @@ import movie_recommender.config as c
 
 
 class OMDbClient:
+    """Class that fetches metadata from OMDbAPI.com"""
     def __init__(self, api_key: str, base_url: str = "https://www.omdbapi.com"):
         self.api_key = api_key
         self.base_url = base_url
@@ -18,6 +20,7 @@ class OMDbClient:
         return self._get_data(imdb_id=imdb_id)
 
     def _get_data(self, *, title: str | None = None, imdb_id: str | None = None) -> dict | None:
+        """Movie metadata can be fetched using either it's title or it's imdb_id"""
         if (title is None) == (imdb_id is None):
             raise ValueError("Provide exactly one of title or imdb_id")
 
@@ -42,6 +45,10 @@ class OMDbClient:
         return data['Response'] == 'True'
 
     def _fix_ratings(self, data: dict) -> dict:
+        """
+        Ratings is the only nested key in the dict.
+        Flattening it for easy conversion to dataframe later.
+        """
         for d in data.get('Ratings', []):
             source = d['Source']
             rating = d['Value']
@@ -51,6 +58,7 @@ class OMDbClient:
 
 
 class Extractor:
+    """Class that creates a dataframe of raw movie metadata"""
     def __init__(self, client: OMDbClient, request_main_universe: bool = False):
         self.client = client
         self.request_main_universe = request_main_universe
@@ -74,10 +82,14 @@ class Extractor:
         films.write_parquet(c.EXTRACTED_PARQUET)
 
     def _retrieve_main_universe(self) -> pl.DataFrame:
+        """
+        Retrieve main movie universe from stored parquet file if available.
+        Else use the c.RATINGS_TSV file from imdb to create and store metadata for top X movies
+        """
         if not self.request_main_universe and c.MAIN_UNIVERSE_PARQUET.exists():
             return pl.read_parquet(c.MAIN_UNIVERSE_PARQUET)
 
-        top_movie_ids = self._get_top_movie_ids(10000)
+        top_movie_ids = self._get_top_movie_ids(c.RATINGS_TSV, 10000)
         with ThreadPoolExecutor(max_workers=10) as executor:
             records = [
                 r for r in executor.map(self.client.get_by_id, top_movie_ids)
@@ -90,6 +102,10 @@ class Extractor:
         return df
     
     def _retrieve_remaining_titles(self, remaining: set[str]) -> pl.DataFrame:
+        """
+        We need metadata for all films in the user's watched list.
+        Retrieving metadata for films not found in the main movie universe dataframe
+        """
         print(f"Fetching metadata for {len(remaining)} other movies")
 
         with ThreadPoolExecutor(max_workers=10) as executor:
@@ -100,12 +116,12 @@ class Extractor:
 
         return pl.from_dicts(records)
     
-    def _get_top_movie_ids(self, num: int = 10000) -> set[str]:
-        df = self._read_tsv(c.RATINGS_TSV)
+    def _get_top_movie_ids(self, path: Path, num: int = 10000) -> set[str]:
+        df = self._read_tsv(path)
         top = df.sort('numVotes', descending=True).head(num)
         return set(top['tconst'])
 
-    def _read_tsv(self, path: str) -> pl.DataFrame:
+    def _read_tsv(self, path: Path) -> pl.DataFrame:
         return pl.read_csv(
             path, 
             separator='\t', 
@@ -115,6 +131,7 @@ class Extractor:
         )
     
     def _enrich(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Required when generating recommendations"""
         return df.with_columns([
             pl.col('Title').is_in(self.watched).alias('watched'),
             pl.col('Title').is_in(self.favourites).alias('favourites')
