@@ -11,4 +11,5 @@ __pycache__/
 .DS_Store
 .vscode/
 .history
-pipeline/archive.py
+ARCHIVE/
+*.egg-info/

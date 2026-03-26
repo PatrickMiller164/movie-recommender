@@ -1,0 +1,111 @@
+body {
+    background-color: rgb(4, 22, 46); /* light gray */
+}
+
+.title {
+    text-align: center; 
+    color: #fff;
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000; /* on top of everything */
+}
+
+.modal-content {
+    background-color: rgb(100, 100, 100);
+    color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 800px;
+    width: 90%;
+    max-height: 90%;
+    overflow-y: auto;
+    position: relative;
+}
+
+.close {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.filter-dropdown {
+    padding: 8px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    margin-right: 8px;
+    margin-top: 20px;
+    background-color: white;
+    cursor: pointer;
+    text-align: center;
+}
+
+/* Optional: change appearance on hover */
+.filter-dropdown:hover {
+    border-color: #888;
+}
+
+#resultsList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    padding: 10px;
+    max-width: 1000px;
+    margin: 0 auto; /* center the grid */
+}
+
+.movie-card {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s;
+    aspect-ratio: 2/3; /* width:height = 2:3 typical poster */
+    display: flex;
+    flex-direction: column;
+}
+
+.movie-card:hover {
+    transform: scale(1.05);
+}
+
+.poster {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+.movie-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.85);
+    color: white;
+    padding: 10px;
+    font-size: 0.85em;
+    opacity: 0;
+    transition: opacity 0.2s;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.movie-card:hover .movie-info {
+    opacity: 1;
+}

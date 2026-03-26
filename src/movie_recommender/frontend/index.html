@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Movie Recommender</title>
+        <link rel="stylesheet" href="/frontend/styles.css">
+        <script src="/frontend/script.js" defer></script>
+    </head>
+    <body>
+        <h1 class="title" >Movie Recommender</h1>
+
+        <div style="text-align: center">  
+            <select id="genreFilter" class="filter-dropdown">
+                <option value="">All genres</option>
+            </select>
+            <select id="languageFilter" class="filter-dropdown">
+                <option value="">All languages</option>
+            </select>
+            <select id="countryFilter" class="filter-dropdown">
+                <option value="">All countries</option>
+            </select>
+            <button id="reset" class="filter-dropdown">Reset</button>
+
+            <label for="sort_by" style="margin-right: 8px; color: #fff;">Sort:</label>
+            <select id="sort_by" class="filter-dropdown"></select>
+
+        </div>
+
+        <div id="resultsList" ></div>
+
+        <button id="loadMore" class="filter-dropdown" style="display: block; margin: 20px auto;">Load More</button>
+
+        <div id="movieModal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <span id="closeModal" class="close">&times;</span>
+                <div id="modalBody"></div>
+            </div>
+        </div>
+    </body>
+</html>
