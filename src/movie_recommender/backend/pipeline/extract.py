@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import polars as pl
 
-import movie_recommender.config as c
+from movie_recommender.config import Config
 
 
 class OMDbClient:
@@ -59,7 +59,8 @@ class OMDbClient:
 
 class Extractor:
     """Class that creates a dataframe of raw movie metadata"""
-    def __init__(self, client: OMDbClient, request_main_universe: bool = False):
+    def __init__(self, config: Config, client: OMDbClient, request_main_universe: bool = False):
+        self.config = config
         self.client = client
         self.request_main_universe = request_main_universe
 
@@ -67,7 +68,7 @@ class Extractor:
         self.favourites = set()
 
     def run(self):
-        df = pl.read_csv(c.FILMS_CSV)
+        df = pl.read_csv(self.config.users_films_csv)
         self.watched = set(df['All'].drop_nulls())
         self.favourites = set(df['Favourites'].drop_nulls())
 
@@ -79,17 +80,17 @@ class Extractor:
 
         films = pl.concat([main_universe_df, remaining_df.select(main_universe_df.columns)])
         films = self._enrich(films)
-        films.write_parquet(c.EXTRACTED_PARQUET)
+        films.write_parquet(self.config.extracted_parquet)
 
     def _retrieve_main_universe(self) -> pl.DataFrame:
         """
         Retrieve main movie universe from stored parquet file if available.
         Else use the c.RATINGS_TSV file from imdb to create and store metadata for top X movies
         """
-        if not self.request_main_universe and c.MAIN_UNIVERSE_PARQUET.exists():
-            return pl.read_parquet(c.MAIN_UNIVERSE_PARQUET)
+        if not self.request_main_universe and self.config.main_universe_parquet.exists():
+            return pl.read_parquet(self.config.main_universe_parquet)
 
-        top_movie_ids = self._get_top_movie_ids(c.RATINGS_TSV, 10000)
+        top_movie_ids = self._get_top_movie_ids(self.config.imdb_ratings_tsv, 10000)
         with ThreadPoolExecutor(max_workers=10) as executor:
             records = [
                 r for r in executor.map(self.client.get_by_id, top_movie_ids)
@@ -97,7 +98,7 @@ class Extractor:
             ]
 
         df = pl.from_dicts(records)
-        df.write_parquet(c.MAIN_UNIVERSE_PARQUET)
+        df.write_parquet(self.config.main_universe_parquet)
 
         return df
     
@@ -143,5 +144,6 @@ if __name__=="__main__":
     import os
     load_dotenv()
 
+    config = Config()
     client = OMDbClient(os.environ['API_KEY'])
-    Extractor(client).run()
+    Extractor(config, client).run()
