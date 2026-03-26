@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-import movie_recommender.config as c
+from movie_recommender.config import Config
 from movie_recommender.backend.pipeline.extract import Extractor, OMDbClient
 from movie_recommender.backend.pipeline.transform import Transformer
 from movie_recommender.backend.pipeline.recommend import recommend
@@ -13,18 +13,19 @@ API_KEY = os.environ['API_KEY']
 def run_pipeline():
     print("Starting running pipeline")
 
-    if not c.EXTRACTED_PARQUET.exists():
+    config = Config()
+
+    if not config.extracted_parquet.exists():
         print("Running extractor")
         client = OMDbClient(API_KEY)
-        Extractor(client).run()
+        Extractor(config, client).run()
 
-    if not c.TRANSFORMED_PARQUET.exists():
+    if not config.transformed_parquet.exists():
         print("Running transformer")
-        Transformer().run()
+        Transformer(config).run()
 
-    if not c.RECOMMENDATIONS_CSV.exists():
+    if not config.recommendations_csv.exists():
         print("Running recommender")
         recommend()
 
     print("Finished running pipeline.")
-
